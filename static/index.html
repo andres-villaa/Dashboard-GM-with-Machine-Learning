@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Predictor RF — GM Toluca</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#194390;--blue:#1F3F97;--mid:#5C93CC;--light:#86C1E2;
+  --white:#fff;--bg:#f0f5fb;--surface:#fff;--text:#0d1e3a;--muted:#5a7399;
+  --border:rgba(25,67,144,0.12);--border2:rgba(25,67,144,0.22);
+  --danger:#e03535;--warn:#e08c00;--ok:#1a9e5c;
+  --danger-bg:rgba(224,53,53,0.08);--warn-bg:rgba(224,140,0,0.08);--ok-bg:rgba(26,158,92,0.08);
+  --radius:14px;--radius-sm:8px;
+}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;min-height:100vh;}
+.topbar{background:var(--navy);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:54px;position:sticky;top:0;z-index:100;}
+.topbar-left{display:flex;align-items:center;gap:12px;}
+.topbar-logo{background:#fff;color:var(--navy);font-weight:700;font-size:13px;padding:4px 9px;border-radius:6px;}
+.topbar-title{color:#fff;font-size:14px;font-weight:500;}
+.topbar-sub{color:rgba(255,255,255,0.5);font-size:11px;margin-top:1px;}
+.api-status{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,0.7);}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#34c77b;}
+.status-dot.offline{background:#e03535;}
+.layout{display:grid;grid-template-columns:360px 1fr;min-height:calc(100vh - 54px);}
+.left-panel{background:var(--surface);border-right:1px solid var(--border2);padding:20px 18px;display:flex;flex-direction:column;gap:14px;position:sticky;top:54px;height:calc(100vh - 54px);overflow-y:auto;}
+.pred-tag{display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:#fff;font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;padding:4px 10px;border-radius:20px;margin-bottom:10px;}
+.model-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(25,67,144,0.1);color:var(--navy);font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid rgba(25,67,144,0.2);margin-bottom:14px;}
+.field{margin-bottom:12px;}
+.field label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:500;}
+.field input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:9px 11px;font-size:13px;font-family:'DM Mono',monospace;outline:none;transition:border-color .2s;}
+.field input:focus{border-color:var(--navy);}
+.derived-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+.derived-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;}
+.derived-box .d-label{font-size:10px;color:var(--muted);font-weight:500;margin-bottom:2px;}
+.derived-box .d-val{font-size:14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--navy);}
+.result-card{border-radius:var(--radius-sm);padding:16px 18px;display:flex;align-items:center;gap:16px;transition:all .3s;margin-bottom:10px;}
+.result-card.danger{background:var(--danger-bg);border:1.5px solid rgba(224,53,53,0.3);}
+.result-card.warn{background:var(--warn-bg);border:1.5px solid rgba(224,140,0,0.3);}
+.result-card.ok{background:var(--ok-bg);border:1.5px solid rgba(26,158,92,0.3);}
+.result-card.loading{background:var(--bg);border:1.5px solid var(--border);opacity:0.6;}
+.risk-gauge{width:64px;height:64px;border-radius:50%;border:4px solid var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;transition:border-color .3s;}
+.rpct{font-size:18px;font-weight:600;font-family:'DM Mono',monospace;line-height:1;transition:color .3s;color:var(--muted);}
+.rlbl{font-size:9px;margin-top:1px;transition:color .3s;color:var(--muted);}
+.result-text h2{font-size:15px;font-weight:600;transition:color .3s;color:var(--muted);}
+.result-text p{font-size:11px;margin-top:3px;line-height:1.5;color:var(--muted);}
+.rec-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;}
+.rec-box h3{font-size:11px;font-weight:600;color:var(--navy);margin-bottom:4px;}
+.rec-box p{font-size:11px;color:var(--muted);line-height:1.55;}
+.model-info{background:rgba(25,67,144,0.05);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;}
+.model-info p{font-size:11px;color:var(--muted);line-height:1.6;}
+.model-info strong{color:var(--navy);}
+.right-panel{display:flex;flex-direction:column;}
+.tabs-bar{background:var(--surface);border-bottom:1px solid var(--border2);padding:0 20px;display:flex;align-items:center;gap:2px;position:sticky;top:54px;z-index:50;}
+.tab-btn{background:none;border:none;color:var(--muted);font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;padding:14px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:color .2s,border-color .2s;white-space:nowrap;}
+.tab-btn:hover{color:var(--navy);}
+.tab-btn.active{color:var(--navy);border-bottom-color:var(--navy);font-weight:600;}
+.tab-content{display:none;padding:18px 20px;flex-direction:column;gap:14px;}
+.tab-content.active{display:flex;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
+.card-title{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px;}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.g21{display:grid;grid-template-columns:2fr 1fr;gap:14px;}
+.section-label{font-size:11px;font-weight:600;color:var(--navy);text-transform:uppercase;letter-spacing:0.07em;padding:4px 0 2px;border-bottom:2px solid var(--navy);margin-bottom:14px;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead tr{border-bottom:2px solid var(--border);}
+th{padding:0 8px 7px;text-align:left;font-weight:600;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
+td{padding:8px;border-bottom:1px solid var(--border);color:var(--text);}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(25,67,144,0.02);}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:600;font-family:'DM Mono',monospace;}
+.badge.Alto,.badge.alto{background:var(--danger-bg);color:var(--danger);}
+.badge.Medio,.badge.medio{background:var(--warn-bg);color:var(--warn);}
+.badge.Bajo,.badge.bajo{background:var(--ok-bg);color:var(--ok);}
+.metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.metric-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;border-top:3px solid var(--navy);}
+.metric-card.accent{border-top-color:var(--mid);}
+.metric-label{font-size:10px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;}
+.metric-val{font-size:22px;font-weight:600;font-family:'DM Mono',monospace;color:var(--navy);}
+.metric-card.accent .metric-val{color:var(--blue);}
+.metric-sub{font-size:10px;color:var(--muted);margin-top:3px;}
+.bar-item{margin-bottom:10px;}
+.bar-item:last-child{margin-bottom:0;}
+.bar-header{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;}
+.bar-header span:first-child{color:var(--text);font-weight:500;}
+.bar-header span:last-child{color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;}
+.bar-track{height:6px;background:var(--bg);border-radius:6px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:6px;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(25,67,144,0.3);border-top-color:var(--navy);border-radius:50%;animation:spin .7s linear infinite;margin-left:6px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.tab-content.active{animation:fadeIn .25s ease both;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo">GM</div>
+    <div>
+      <div class="topbar-title">Predictor de Ruptura de Herramienta</div>
+      <div class="topbar-sub">Random Forest — General Motors Toluca · 2025–2026</div>
+    </div>
+  </div>
+  <div class="api-status">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Conectando al modelo...</span>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div>
+      <span class="pred-tag">Predictor de riesgo</span><br/>
+      <span class="model-badge">Random Forest · Accuracy 79% · Recall 91.3%</span>
+      <p style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:16px;">¿Mi herramienta se va a romper?</p>
+
+      <div class="field">
+        <label>Vida total de la herramienta (ciclos)</label>
+        <input type="number" id="inp-vida" value="10000" min="600" max="51700" step="100"/>
+      </div>
+      <div class="field">
+        <label>Piezas maquinadas hasta ahora</label>
+        <input type="number" id="inp-piezas" value="5000" min="0" max="25000" step="100"/>
+      </div>
+
+      <div class="derived-row">
+        <div class="derived-box">
+          <div class="d-label">% Vida utilizada</div>
+          <div class="d-val" id="d-pct">—</div>
+        </div>
+        <div class="derived-box">
+          <div class="d-label">Vida desperdiciada</div>
+          <div class="d-val" id="d-vd">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="result-card loading" id="result-card">
+      <div class="risk-gauge" id="risk-gauge">
+        <span class="rpct" id="risk-pct">—</span>
+        <span class="rlbl" id="risk-rlbl">riesgo</span>
+      </div>
+      <div class="result-text">
+        <h2 id="risk-label">Calculando...</h2>
+        <p id="risk-desc">Esperando respuesta del modelo.</p>
+      </div>
+    </div>
+
+    <div class="rec-box">
+      <h3>Recomendación</h3>
+      <p id="rec-body">Ingresa los datos para obtener una predicción.</p>
+    </div>
+
+    <div class="model-info">
+      <p>
+        <strong>Modelo:</strong> Random Forest (300 árboles, profundidad 8)<br/>
+        <strong>Variables:</strong> Vida Total, Piezas Maquinadas, Vida Desperdiciada, % Vida<br/>
+        <strong>Datos reales:</strong> 283 registros limpios de GM Toluca<br/>
+        <strong>Recall (Rota):</strong> 91.3% &nbsp;·&nbsp; <strong>Precision:</strong> 84%
+      </p>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="tabs-bar">
+      <button class="tab-btn active" onclick="switchTab('resumen',this)">Resumen</button>
+      <button class="tab-btn" onclick="switchTab('modelo',this)">Métricas del modelo</button>
+      <button class="tab-btn" onclick="switchTab('historico',this)">Historial de fallas</button>
+    </div>
+
+    <!-- TAB 1 -->
+    <div id="tab-resumen" class="tab-content active">
+      <div class="section-label">Vista general</div>
+      <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-label">Total fallas</div><div class="metric-val" id="s-total">—</div><div class="metric-sub">2025–2026</div></div>
+        <div class="metric-card"><div class="metric-label">Vida prom. aprovechada</div><div class="metric-val" id="s-vida">—</div><div class="metric-sub">al momento del fallo</div></div>
+        <div class="metric-card accent"><div class="metric-label">Falla más frecuente</div><div class="metric-val" style="font-size:18px">Rota</div><div class="metric-sub">82.7% de los casos</div></div>
+        <div class="metric-card accent"><div class="metric-label">Módulo crítico</div><div class="metric-val" style="font-size:18px">Mód. 3</div><div class="metric-sub">70 fallas en nocturno</div></div>
+      </div>
+      <div class="g21">
+        <div class="card">
+          <div class="card-title">Tendencia de fallas por mes</div>
+          <canvas id="lineChart" height="130"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title">Tipo de falla</div>
+          <div class="bar-item"><div class="bar-header"><span>Rota</span><span>82.7%</span></div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--danger)"></div></div></div>
+          <div class="bar-item"><div class="bar-header"><span>Desportillamiento</span><span>14.9%</span></div><div class="bar-track"><div class="bar-fill" style="width:18%;background:var(--navy)"></div></div></div>
+          <div class="bar-item"><div class="bar-header"><span>Caída</span><span>1.3%</span></div><div class="bar-track"><div class="bar-fill" style="width:4%;background:var(--mid)"></div></div></div>
+          <div class="bar-item"><div class="bar-header"><span>Colisión</span><span>1.0%</span></div><div class="bar-track"><div class="bar-fill" style="width:3%;background:var(--mid)"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2 -->
+    <div id="tab-modelo" class="tab-content">
+      <div class="section-label">Desempeño del Random Forest</div>
+      <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-label">Accuracy</div><div class="metric-val">79%</div><div class="metric-sub">conjunto de prueba</div></div>
+        <div class="metric-card"><div class="metric-label">Recall (Rota)</div><div class="metric-val">91.3%</div><div class="metric-sub">rupturas detectadas</div></div>
+        <div class="metric-card accent"><div class="metric-label">Precision (Rota)</div><div class="metric-val">84%</div><div class="metric-sub">alertas correctas</div></div>
+        <div class="metric-card accent"><div class="metric-label">F1-Score</div><div class="metric-val">87.5%</div><div class="metric-sub">balance general</div></div>
+      </div>
+      <div class="g2">
+        <div class="card">
+          <div class="card-title">Importancia de variables</div>
+          <div class="bar-item"><div class="bar-header"><span>Vida Total de HTTA</span><span>35.1%</span></div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--navy)"></div></div></div>
+          <div class="bar-item"><div class="bar-header"><span>Vida Desperdiciada</span><span>28.8%</span></div><div class="bar-track"><div class="bar-fill" style="width:82%;background:var(--navy)"></div></div></div>
+          <div class="bar-item"><div class="bar-header"><span>% Vida Utilizada</span><span>19.0%</span></div><div class="bar-track"><div class="bar-fill" style="width:54%;background:var(--mid)"></div></div></div>
+          <div class="bar-item"><div class="bar-header"><span>Piezas Maquinadas</span><span>17.1%</span></div><div class="bar-track"><div class="bar-fill" style="width:49%;background:var(--mid)"></div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Datos de entrenamiento</div>
+          <table>
+            <thead><tr><th>Parámetro</th><th>Valor</th></tr></thead>
+            <tbody>
+              <tr><td>Registros totales</td><td style="font-family:'DM Mono',monospace" id="s-registros">283</td></tr>
+              <tr><td>Entrenamiento (80%)</td><td style="font-family:'DM Mono',monospace" id="s-train">226</td></tr>
+              <tr><td>Prueba (20%)</td><td style="font-family:'DM Mono',monospace" id="s-test">57</td></tr>
+              <tr><td>Clase Rota</td><td style="font-family:'DM Mono',monospace">228 (80.6%)</td></tr>
+              <tr><td>Clase Otro daño</td><td style="font-family:'DM Mono',monospace">55 (19.4%)</td></tr>
+              <tr><td>CV AUC (5-fold)</td><td style="font-family:'DM Mono',monospace">0.6919</td></tr>
+              <tr><td>CV F1 (5-fold)</td><td style="font-family:'DM Mono',monospace">0.8621</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3 -->
+    <div id="tab-historico" class="tab-content">
+      <div class="section-label">Historial — predicciones del modelo sobre datos reales</div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <span style="font-size:11px;color:var(--muted);">Mostrando predicciones del Random Forest sobre los 283 registros del dataset.</span>
+          <span id="loading-hist" class="spinner" style="display:none;"></span>
+        </div>
+        <table>
+          <thead><tr>
+            <th>#</th>
+            <th>Falla real</th>
+            <th>Vida total</th>
+            <th>Piezas mac.</th>
+            <th>% vida</th>
+            <th>Prob. ruptura</th>
+            <th>Nivel RF</th>
+          </tr></thead>
+          <tbody id="tabla-historico">
+            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Cargando datos del servidor...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';  // mismo origen — FastAPI sirve el HTML
+
+// ── STATUS ────────────────────────────────────────────────────────────────
+async function checkStatus(){
+  try {
+    const r = await fetch(`${API}/stats`);
+    if(r.ok){
+      const d = await r.json();
+      document.getElementById('status-dot').classList.remove('offline');
+      document.getElementById('status-text').textContent = 'Modelo activo';
+      document.getElementById('s-total').textContent = d.total_fallas;
+      document.getElementById('s-vida').textContent  = d.vida_prom + '%';
+      document.getElementById('s-registros').textContent = d.registros_train + d.registros_test;
+      document.getElementById('s-train').textContent = d.registros_train;
+      document.getElementById('s-test').textContent  = d.registros_test;
+    }
+  } catch(e){
+    document.getElementById('status-dot').classList.add('offline');
+    document.getElementById('status-text').textContent = 'Sin conexión al modelo';
+  }
+}
+
+// ── PREDICTOR ─────────────────────────────────────────────────────────────
+let debounceTimer;
+async function calcRisk(){
+  const vt = parseFloat(document.getElementById('inp-vida').value)   || 0;
+  const pm = parseFloat(document.getElementById('inp-piezas').value) || 0;
+  if(!vt) return;
+
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`${API}/predict`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({vida_total: vt, piezas_maquinadas: pm})
+      });
+      const d = await r.json();
+
+      document.getElementById('d-pct').textContent = d.pct_vida + '%';
+      document.getElementById('d-vd').textContent  = d.vida_desperdiciada.toLocaleString();
+      document.getElementById('risk-pct').textContent = d.probabilidad + '%';
+      document.getElementById('risk-label').textContent = 'Riesgo ' + d.nivel;
+      document.getElementById('rec-body').textContent   = d.recomendacion;
+
+      const card  = document.getElementById('result-card');
+      const gauge = document.getElementById('risk-gauge');
+      const nivel = d.nivel;
+
+      const colorMap = {
+        'Alto':  {color:'var(--danger)', borderC:'rgba(224,53,53,0.3)',  bgC:'var(--danger-bg)', cls:'danger'},
+        'Medio': {color:'var(--warn)',   borderC:'rgba(224,140,0,0.3)',  bgC:'var(--warn-bg)',   cls:'warn'},
+        'Bajo':  {color:'var(--ok)',     borderC:'rgba(26,158,92,0.3)', bgC:'var(--ok-bg)',    cls:'ok'},
+      };
+      const cm = colorMap[nivel] || colorMap['Bajo'];
+
+      card.className = `result-card ${cm.cls}`;
+      card.style.background  = cm.bgC;
+      card.style.borderColor = cm.borderC;
+      gauge.style.borderColor = cm.color;
+
+      const descs = {
+        'Alto':  'Alta probabilidad de ruptura total en el siguiente ciclo.',
+        'Medio': 'La herramienta podría fallar. Monitorear en el próximo turno.',
+        'Bajo':  'Herramienta en buen estado. Continuar el ciclo normalmente.',
+      };
+      document.getElementById('risk-desc').textContent = descs[nivel];
+
+      ['risk-pct','risk-rlbl','risk-label','risk-desc'].forEach(id=>{
+        document.getElementById(id).style.color = cm.color;
+      });
+
+    } catch(e) {
+      document.getElementById('risk-label').textContent = 'Error de conexión';
+    }
+  }, 400);
+}
+
+['inp-vida','inp-piezas'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', calcRisk);
+});
+
+// ── HISTORIAL ─────────────────────────────────────────────────────────────
+async function loadHistorico(){
+  document.getElementById('loading-hist').style.display = 'inline-block';
+  try {
+    const r = await fetch(`${API}/historico`);
+    const data = await r.json();
+    const tbody = document.getElementById('tabla-historico');
+    tbody.innerHTML = '';
+    data.slice(0, 50).forEach((row, i) => {
+      tbody.innerHTML += `<tr>
+        <td style="color:var(--muted)">${i+1}</td>
+        <td>${row.falla}</td>
+        <td style="font-family:'DM Mono',monospace">${row.vida_total.toLocaleString()}</td>
+        <td style="font-family:'DM Mono',monospace">${row.piezas.toLocaleString()}</td>
+        <td style="font-family:'DM Mono',monospace">${row.pct_vida}%</td>
+        <td style="font-family:'DM Mono',monospace;font-weight:600">${row.prob}%</td>
+        <td><span class="badge ${row.nivel}">${row.nivel}</span></td>
+      </tr>`;
+    });
+  } catch(e){
+    document.getElementById('tabla-historico').innerHTML =
+      '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Error al cargar datos del servidor.</td></tr>';
+  }
+  document.getElementById('loading-hist').style.display = 'none';
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────
+function switchTab(id, btn){
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+  if(id === 'historico') loadHistorico();
+}
+
+// ── CHARTS ────────────────────────────────────────────────────────────────
+Chart.defaults.font.family="'DM Sans',sans-serif";
+Chart.defaults.color='#5a7399';
+const navy='#194390', mid='#5C93CC', light='#86C1E2';
+
+new Chart(document.getElementById('lineChart'),{
+  type:'line',
+  data:{labels:['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
+    datasets:[{label:'Fallas',data:[18,22,28,31,35,27,33,38,30,25,29,32],
+      borderColor:navy,backgroundColor:'rgba(25,67,144,0.07)',
+      borderWidth:2.5,pointBackgroundColor:navy,pointRadius:4,fill:true,tension:0.4}]},
+  options:{responsive:true,plugins:{legend:{display:false}},
+    scales:{x:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10}}},
+            y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10}},beginAtZero:true}}}
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+checkStatus();
+calcRisk();
+</script>
+</body>
+</html>
