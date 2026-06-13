@@ -1,0 +1,6 @@
+#ignorar archivos csv o xsls
+*.csv
+*.xlsx
+
+# Ignorar .venv
+.venv/

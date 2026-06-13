@@ -22,7 +22,9 @@ app.add_middleware(
 # ── CARGAR Y ENTRENAR MODELO AL INICIAR ───────────────────────────────────
 print("Cargando datos y entrenando modelo...")
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "data_clean_v2.csv")
+Dataset = "" # Aquí se debe colocar la ruta al CSV con los datos usar
+
+DATA_PATH = os.path.join(os.path.dirname(__file__), Dataset)
 df = pd.read_csv(DATA_PATH)
 
 FEATURES = [
